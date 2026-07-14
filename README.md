@@ -1,7 +1,5 @@
 <div align="center">
 
-<img src="https://capsule-render.vercel.app/api?type=waving&color=gradient&customColorList=6,11,20&height=180&section=header&text=DIU%20Routine&fontSize=55&fontColor=ffffff&animation=fadeIn&fontAlignY=38&desc=Offline%20Schedule%20Manager%20%E2%80%A2%20Powered%20by%20Gemini%20AI&descAlignY=58&descSize=16" width="100%"/>
-
 <img src="https://readme-typing-svg.demolab.com?font=Fira+Code&weight=500&size=20&duration=3000&pause=800&color=8B5CF6&center=true&vCenter=true&width=600&lines=Scan+a+PDF.+Get+a+Routine.+Done.;Pinch.+Zoom.+Parse.+Track.;Built+for+DIU+Students+%F0%9F%8E%93" alt="Typing SVG" />
 
 <br/>
