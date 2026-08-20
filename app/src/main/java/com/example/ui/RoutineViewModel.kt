@@ -34,6 +34,10 @@ import com.example.data.GenerationConfig
 
 class RoutineViewModel(application: Application) : AndroidViewModel(application) {
 
+    companion object {
+        const val GEMINI_MODEL = "gemini-3.6-flash"
+    }
+
     private val repository: RoutineRepository
     private val sharedPrefs = application.getSharedPreferences("diu_routine_settings", Context.MODE_PRIVATE)
 
@@ -109,13 +113,13 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                     )
                 )
                 val response = GeminiClient.api.generateContent(
-                    model = "gemini-2.5-flash",
+                    model = GEMINI_MODEL,
                     apiKey = apiKey,
                     request = request
                 )
                 val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
                 if (!text.isNullOrBlank()) {
-                    onResult(true, "Successfully connected to Gemini API!")
+                    onResult(true, "Successfully connected to Gemini AI!")
                 } else {
                     onResult(false, "Gemini responded, but output was empty.")
                 }
@@ -501,7 +505,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 )
                 
                 val response = GeminiClient.api.generateContent(
-                    model = "gemini-2.5-flash",
+                    model = GEMINI_MODEL,
                     apiKey = apiKey,
                     request = request
                 )
@@ -675,7 +679,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 )
                 
                 val response = GeminiClient.api.generateContent(
-                    model = "gemini-2.5-flash",
+                    model = GEMINI_MODEL,
                     apiKey = apiKey,
                     request = request
                 )
@@ -1038,7 +1042,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 )
                 
                 val response = GeminiClient.api.generateContent(
-                    model = "gemini-2.5-flash",
+                    model = GEMINI_MODEL,
                     apiKey = apiKey,
                     request = request
                 )
@@ -1139,7 +1143,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 )
                 
                 val response = GeminiClient.api.generateContent(
-                    model = "gemini-2.5-flash",
+                    model = GEMINI_MODEL,
                     apiKey = apiKey,
                     request = request
                 )
