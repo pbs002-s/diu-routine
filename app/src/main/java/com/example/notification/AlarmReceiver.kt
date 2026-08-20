@@ -50,7 +50,7 @@ class AlarmReceiver : BroadcastReceiver() {
         )
 
         // Build notification
-        val titleText = if (isExam) "Upcoming Exam 📝: $subjectCode" else "Upcoming Class 📅: $subjectCode"
+        val titleText = if (isExam) "Upcoming Exam: $subjectCode" else "Upcoming Class: $subjectCode"
         val notificationText = if (isExam) {
             "$subjectName in Room $roomNo starts at $timeStart on $examDate"
         } else if (roomNo.isNotEmpty()) {

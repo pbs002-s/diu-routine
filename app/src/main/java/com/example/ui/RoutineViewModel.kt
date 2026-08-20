@@ -69,6 +69,62 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     private val _alarmOffsetMinutes = MutableStateFlow(sharedPrefs.getInt("alarm_offset_minutes", 20))
     val alarmOffsetMinutes: StateFlow<Int> = _alarmOffsetMinutes.asStateFlow()
 
+    // Gemini API Key Management
+    private val _geminiApiKey = MutableStateFlow(sharedPrefs.getString("gemini_api_key", "") ?: "")
+    val geminiApiKey: StateFlow<String> = _geminiApiKey.asStateFlow()
+
+    fun setGeminiApiKey(key: String) {
+        _geminiApiKey.value = key.trim()
+        sharedPrefs.edit().putString("gemini_api_key", key.trim()).apply()
+    }
+
+    fun getEffectiveApiKey(): String {
+        val customKey = _geminiApiKey.value.trim()
+        if (customKey.isNotEmpty()) {
+            return customKey
+        }
+        val buildKey = com.example.BuildConfig.GEMINI_API_KEY.trim()
+        if (buildKey.isNotEmpty() && !buildKey.contains("your_gemini_api_key", ignoreCase = true) && !buildKey.contains("DEFAULT_API_KEY", ignoreCase = true)) {
+            return buildKey
+        }
+        return ""
+    }
+
+    fun testGeminiConnection(onResult: (Boolean, String) -> Unit) {
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
+            onResult(false, "Gemini API key is not configured. Please enter your API key.")
+            return
+        }
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val request = GenerateContentRequest(
+                    contents = listOf(
+                        GeminiContent(
+                            parts = listOf(Part(text = "Respond with 'OK' only."))
+                        )
+                    ),
+                    generationConfig = GenerationConfig(
+                        temperature = 0.0
+                    )
+                )
+                val response = GeminiClient.api.generateContent(
+                    model = "gemini-2.5-flash",
+                    apiKey = apiKey,
+                    request = request
+                )
+                val text = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (!text.isNullOrBlank()) {
+                    onResult(true, "Successfully connected to Gemini API!")
+                } else {
+                    onResult(false, "Gemini responded, but output was empty.")
+                }
+            } catch (e: Exception) {
+                onResult(false, "Connection error: ${e.localizedMessage ?: "Please check your API key and internet connection."}")
+            }
+        }
+    }
+
     // Scanner States for Class Routine
     private val _isScanning = MutableStateFlow(false)
     val isScanning: StateFlow<Boolean> = _isScanning.asStateFlow()
@@ -115,7 +171,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         allExams = repository.allExams
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-        // ⚠️ CRITICAL ALARM FLOW REGULATION: 
+        // CRITICAL ALARM FLOW REGULATION: 
         // Whenever allClasses or allExams update in Room, Room emits the list with correct unique IDs.
         // Collecting here ensures alarms are scheduled with correct, persisted non-zero IDs, avoiding collisions!
         viewModelScope.launch(Dispatchers.IO) {
@@ -259,7 +315,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                     StudyLog(
                         date = todayStr,
                         durationMinutes = 90,
-                        description = "Attended ${updated.subjectCode} (${updated.subjectName}) 📅",
+                        description = "Attended ${updated.subjectCode} (${updated.subjectName})",
                         type = "CLASS"
                     )
                 )
@@ -314,7 +370,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                     StudyLog(
                         date = todayStr,
                         durationMinutes = 180, // Exam typically 3 hours (180 mins)
-                        description = "Completed Final Exam: ${updated.subjectCode} (${updated.subjectName}) 📝",
+                        description = "Completed Final Exam: ${updated.subjectCode} (${updated.subjectName})",
                         type = "EXAM"
                     )
                 )
@@ -331,7 +387,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 StudyLog(
                     date = todayStr,
                     durationMinutes = durationMinutes,
-                    description = "$topic 📚",
+                    description = topic,
                     type = "STUDY"
                 )
             )
@@ -367,15 +423,136 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun parseAndScanText(text: String) {
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isNotEmpty()) {
+            scanClassTextWithGemini(text)
+        } else {
+            _isScanning.value = true
+            _scanError.value = null
+            _scanResult.value = null
+            viewModelScope.launch(Dispatchers.Default) {
+                try {
+                    val parsed = RoutineTextParser.parseRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    _scanResult.value = parsed
+                } catch (e: Exception) {
+                    _scanError.value = "Failed parsing text: ${e.localizedMessage}"
+                } finally {
+                    _isScanning.value = false
+                }
+            }
+        }
+    }
+
+    fun scanClassTextWithGemini(text: String) {
         _isScanning.value = true
         _scanError.value = null
         _scanResult.value = null
-        viewModelScope.launch(Dispatchers.Default) {
+        
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
             try {
                 val parsed = RoutineTextParser.parseRoutineText(text, _selectedDept.value, _selectedSection.value)
                 _scanResult.value = parsed
             } catch (e: Exception) {
                 _scanError.value = "Failed parsing text: ${e.localizedMessage}"
+            } finally {
+                _isScanning.value = false
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val prompt = """
+                    Analyze the following unformatted or unstructured class routine text of Daffodil International University (DIU).
+                    Extract all class schedules and map them into a structured JSON array.
+                    Only output a valid JSON array and nothing else. No markdown block formatting, no extra explanation text.
+                    
+                    The output MUST be a JSON array where each object has these EXACT fields (and no others):
+                    - "dayOfWeek": The day of the week, e.g. "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday".
+                    - "subjectCode": The subject code, e.g. "CSE 322".
+                    - "subjectName": The subject name, e.g. "Software Engineering".
+                    - "teacherCode": The teacher code/initials, e.g. "MAM".
+                    - "timeStart": The class start time in 24-hour HH:mm format, e.g. "08:30".
+                    - "timeEnd": The class end time in 24-hour HH:mm format, e.g. "10:00".
+                    - "roomNo": The room number, e.g. "604 MC".
+                    - "department": The department, e.g. "${_selectedDept.value}".
+                    - "section": The section, e.g. "${_selectedSection.value}".
+                    
+                    Guidelines:
+                    - Parse days carefully.
+                    - Convert times to HH:mm 24-hour format.
+                    - Use department = "${_selectedDept.value}" and section = "${_selectedSection.value}" as defaults if not explicitly given.
+                    
+                    Routine Text:
+                    $text
+                """.trimIndent()
+                
+                val request = GenerateContentRequest(
+                    contents = listOf(
+                        GeminiContent(
+                            parts = listOf(Part(text = prompt))
+                        )
+                    ),
+                    generationConfig = GenerationConfig(
+                        responseMimeType = "application/json",
+                        temperature = 0.1
+                    )
+                )
+                
+                val response = GeminiClient.api.generateContent(
+                    model = "gemini-2.5-flash",
+                    apiKey = apiKey,
+                    request = request
+                )
+                
+                val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (responseText.isNullOrEmpty()) {
+                    val fallback = RoutineTextParser.parseRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    _scanResult.value = fallback
+                    return@launch
+                }
+                
+                val cleanJson = responseText.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                val jsonArray = org.json.JSONArray(cleanJson)
+                val list = mutableListOf<ClassSchedule>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    list.add(
+                        ClassSchedule(
+                            dayOfWeek = obj.optString("dayOfWeek", "Sunday"),
+                            subjectCode = obj.optString("subjectCode", ""),
+                            subjectName = obj.optString("subjectName", ""),
+                            teacherCode = obj.optString("teacherCode", ""),
+                            timeStart = obj.optString("timeStart", ""),
+                            timeEnd = obj.optString("timeEnd", ""),
+                            roomNo = obj.optString("roomNo", ""),
+                            department = obj.optString("department", _selectedDept.value),
+                            section = obj.optString("section", _selectedSection.value),
+                            notificationEnabled = true,
+                            isCompleted = false
+                        )
+                    )
+                }
+                
+                if (list.isEmpty()) {
+                    val fallback = RoutineTextParser.parseRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    _scanResult.value = fallback
+                } else {
+                    _scanResult.value = list
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                try {
+                    val fallback = RoutineTextParser.parseRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    if (fallback.isNotEmpty()) {
+                        _scanResult.value = fallback
+                    } else {
+                        _scanError.value = "AI Scan failed: ${e.localizedMessage ?: "Unknown error"}"
+                    }
+                } catch (fallbackEx: Exception) {
+                    _scanError.value = "AI Scan failed: ${e.localizedMessage ?: "Unknown error"}"
+                }
             } finally {
                 _isScanning.value = false
             }
@@ -420,15 +597,137 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     }
 
     fun parseAndScanExamText(text: String) {
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isNotEmpty()) {
+            scanExamTextWithGemini(text)
+        } else {
+            _isScanningExams.value = true
+            _scanExamError.value = null
+            _scanExamResult.value = null
+            viewModelScope.launch(Dispatchers.Default) {
+                try {
+                    val parsed = RoutineTextParser.parseExamRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    _scanExamResult.value = parsed
+                } catch (e: Exception) {
+                    _scanExamError.value = "Failed parsing exam text: ${e.localizedMessage}"
+                } finally {
+                    _isScanningExams.value = false
+                }
+            }
+        }
+    }
+
+    fun scanExamTextWithGemini(text: String) {
         _isScanningExams.value = true
         _scanExamError.value = null
         _scanExamResult.value = null
-        viewModelScope.launch(Dispatchers.Default) {
+        
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
             try {
                 val parsed = RoutineTextParser.parseExamRoutineText(text, _selectedDept.value, _selectedSection.value)
                 _scanExamResult.value = parsed
             } catch (e: Exception) {
                 _scanExamError.value = "Failed parsing exam text: ${e.localizedMessage}"
+            } finally {
+                _isScanningExams.value = false
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val prompt = """
+                    Analyze the following unformatted or unstructured exam schedule text of Daffodil International University (DIU).
+                    Extract all exam schedules and map them into a structured JSON array.
+                    Only output a valid JSON array and nothing else. No markdown block formatting, no extra explanation text.
+                    
+                    The output MUST be a JSON array where each object has these EXACT fields (and no others):
+                    - "date": The exam date in YYYY-MM-DD format, e.g. "2026-07-20".
+                    - "dayOfWeek": The day of the week, e.g. "Monday".
+                    - "subjectCode": The subject code, e.g. "CSE 322".
+                    - "subjectName": The subject name, e.g. "Software Engineering".
+                    - "timeStart": The exam start time in 24-hour HH:mm format, e.g. "10:00".
+                    - "timeEnd": The exam end time in 24-hour HH:mm format, e.g. "13:00".
+                    - "roomNo": The room number, e.g. "604 MC".
+                    - "seatRange": The seat range / seat plan, e.g. "Row A - Row C" or "All".
+                    - "department": The department, e.g. "${_selectedDept.value}".
+                    - "section": The section, e.g. "${_selectedSection.value}".
+                    
+                    Guidelines:
+                    - Parse dates, days, and times carefully. Convert exam slots to 24-hour HH:mm format.
+                    - Use department = "${_selectedDept.value}" and section = "${_selectedSection.value}" as defaults if not explicitly visible.
+                    
+                    Exam Text:
+                    $text
+                """.trimIndent()
+                
+                val request = GenerateContentRequest(
+                    contents = listOf(
+                        GeminiContent(
+                            parts = listOf(Part(text = prompt))
+                        )
+                    ),
+                    generationConfig = GenerationConfig(
+                        responseMimeType = "application/json",
+                        temperature = 0.1
+                    )
+                )
+                
+                val response = GeminiClient.api.generateContent(
+                    model = "gemini-2.5-flash",
+                    apiKey = apiKey,
+                    request = request
+                )
+                
+                val responseText = response.candidates?.firstOrNull()?.content?.parts?.firstOrNull()?.text
+                if (responseText.isNullOrEmpty()) {
+                    val fallback = RoutineTextParser.parseExamRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    _scanExamResult.value = fallback
+                    return@launch
+                }
+                
+                val cleanJson = responseText.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                val jsonArray = org.json.JSONArray(cleanJson)
+                val list = mutableListOf<ExamSchedule>()
+                for (i in 0 until jsonArray.length()) {
+                    val obj = jsonArray.getJSONObject(i)
+                    list.add(
+                        ExamSchedule(
+                            date = obj.optString("date", ""),
+                            dayOfWeek = obj.optString("dayOfWeek", ""),
+                            subjectCode = obj.optString("subjectCode", ""),
+                            subjectName = obj.optString("subjectName", ""),
+                            timeStart = obj.optString("timeStart", ""),
+                            timeEnd = obj.optString("timeEnd", ""),
+                            roomNo = obj.optString("roomNo", ""),
+                            seatRange = obj.optString("seatRange", ""),
+                            department = obj.optString("department", _selectedDept.value),
+                            section = obj.optString("section", _selectedSection.value),
+                            notificationEnabled = true,
+                            isCompleted = false
+                        )
+                    )
+                }
+                
+                if (list.isEmpty()) {
+                    val fallback = RoutineTextParser.parseExamRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    _scanExamResult.value = fallback
+                } else {
+                    _scanExamResult.value = list
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                try {
+                    val fallback = RoutineTextParser.parseExamRoutineText(text, _selectedDept.value, _selectedSection.value)
+                    if (fallback.isNotEmpty()) {
+                        _scanExamResult.value = fallback
+                    } else {
+                        _scanExamError.value = "AI Scan failed: ${e.localizedMessage ?: "Unknown error"}"
+                    }
+                } catch (fallbackEx: Exception) {
+                    _scanExamError.value = "AI Scan failed: ${e.localizedMessage ?: "Unknown error"}"
+                }
             } finally {
                 _isScanningExams.value = false
             }
@@ -602,7 +901,7 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         
         val notification = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Test Notification 🔔")
+            .setContentTitle("Test Notification")
             .setContentText("DIU Routine is working perfectly! Your notifications are enabled.")
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setAutoCancel(true)
@@ -691,6 +990,13 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         _scanError.value = null
         _scanResult.value = null
         
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
+            _scanError.value = "Gemini API key is not configured. Please add your key in Settings or .env file."
+            _isScanning.value = false
+            return
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val base64Image = bitmap.toBase64()
@@ -732,8 +1038,8 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 )
                 
                 val response = GeminiClient.api.generateContent(
-                    model = "gemini-3.1-pro-preview",
-                    apiKey = com.example.BuildConfig.GEMINI_API_KEY,
+                    model = "gemini-2.5-flash",
+                    apiKey = apiKey,
                     request = request
                 )
                 
@@ -743,7 +1049,8 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                     return@launch
                 }
                 
-                val jsonArray = org.json.JSONArray(responseText)
+                val cleanJson = responseText.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                val jsonArray = org.json.JSONArray(cleanJson)
                 val list = mutableListOf<ClassSchedule>()
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)
@@ -784,6 +1091,13 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
         _scanExamError.value = null
         _scanExamResult.value = null
         
+        val apiKey = getEffectiveApiKey()
+        if (apiKey.isEmpty()) {
+            _scanExamError.value = "Gemini API key is not configured. Please add your key in Settings or .env file."
+            _isScanningExams.value = false
+            return
+        }
+
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 val base64Image = bitmap.toBase64()
@@ -825,8 +1139,8 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 )
                 
                 val response = GeminiClient.api.generateContent(
-                    model = "gemini-3.1-pro-preview",
-                    apiKey = com.example.BuildConfig.GEMINI_API_KEY,
+                    model = "gemini-2.5-flash",
+                    apiKey = apiKey,
                     request = request
                 )
                 
@@ -836,7 +1150,8 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                     return@launch
                 }
                 
-                val jsonArray = org.json.JSONArray(responseText)
+                val cleanJson = responseText.trim().removePrefix("```json").removePrefix("```").removeSuffix("```").trim()
+                val jsonArray = org.json.JSONArray(cleanJson)
                 val list = mutableListOf<ExamSchedule>()
                 for (i in 0 until jsonArray.length()) {
                     val obj = jsonArray.getJSONObject(i)

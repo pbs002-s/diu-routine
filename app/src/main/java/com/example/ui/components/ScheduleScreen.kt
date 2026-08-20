@@ -99,7 +99,7 @@ fun ScheduleScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.Default.CalendarMonth, contentDescription = "Classes", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Classes 📅", fontWeight = FontWeight.Bold)
+                        Text("Classes", fontWeight = FontWeight.Bold)
                     }
                 }
                 SegmentedButton(
@@ -110,7 +110,7 @@ fun ScheduleScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(imageVector = Icons.Default.Assignment, contentDescription = "Exams", modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
-                        Text("Exams 📝", fontWeight = FontWeight.Bold)
+                        Text("Exams", fontWeight = FontWeight.Bold)
                     }
                 }
             }

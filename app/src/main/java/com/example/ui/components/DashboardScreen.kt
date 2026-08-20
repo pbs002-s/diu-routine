@@ -550,7 +550,7 @@ fun DashboardScreen(
                             verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
-                                text = "Today's Agenda 📅",
+                                text = "Today's Agenda",
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
                                 color = MaterialTheme.colorScheme.primary
@@ -770,7 +770,7 @@ fun ClassCountdown(targetClass: ClassSchedule, isLight: Boolean) {
 
     if (timeRemaining.isNotEmpty()) {
         Text(
-            text = "⏳ Starts in: $timeRemaining",
+            text = "Starts in: $timeRemaining",
             fontSize = 13.sp,
             fontWeight = FontWeight.Bold,
             color = textColor,

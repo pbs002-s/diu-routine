@@ -1,6 +1,0 @@
-{
-  "name": "DIU Routine",
-  "description": "Fully offline academic routine manager and progress tracker for Daffodil International University students. Supports routine DOCX/PDF scanning, automated 20-min class alerts, study stats logging, and custom templates.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

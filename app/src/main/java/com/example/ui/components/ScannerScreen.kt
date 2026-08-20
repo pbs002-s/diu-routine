@@ -126,7 +126,7 @@ fun ScannerScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(imageVector = Icons.Default.CalendarMonth, contentDescription = "Class Routine", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Class Routine 📅", fontWeight = FontWeight.Bold)
+                    Text("Class Routine", fontWeight = FontWeight.Bold)
                 }
             }
             SegmentedButton(
@@ -137,7 +137,7 @@ fun ScannerScreen(
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
                     Icon(imageVector = Icons.Default.Assignment, contentDescription = "Exam Routine", modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text("Exam Routine 📝", fontWeight = FontWeight.Bold)
+                    Text("Exam Routine", fontWeight = FontWeight.Bold)
                 }
             }
         }
@@ -161,7 +161,7 @@ fun ScannerScreen(
                 Tab(
                     selected = activeTabClass == 1,
                     onClick = { activeTabClass = 1; viewModel.cancelScan() },
-                    text = { Text("PDF File 📄", fontWeight = FontWeight.Bold) }
+                    text = { Text("PDF File", fontWeight = FontWeight.Bold) }
                 )
                 Tab(
                     selected = activeTabClass == 2,
@@ -394,37 +394,81 @@ fun ScannerScreen(
                                 }
                             }
                             2 -> {
-                                Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Paste PDF Class Routine Text", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                        TextButton(
-                                            onClick = {
-                                                val text = clipboardManager.getText()?.text
-                                                if (!text.isNullOrEmpty()) textToScanClass = text
+                                val hasApiKey = viewModel.getEffectiveApiKey().isNotEmpty()
+                                Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text("Paste Routine Text", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                            if (hasApiKey) {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.primaryContainer,
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(12.dp))
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text("Gemini AI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onPrimaryContainer, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                                    }
+                                                }
                                             }
-                                        ) {
-                                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Paste Clipboard")
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            if (textToScanClass.isNotEmpty()) {
+                                                TextButton(onClick = { textToScanClass = "" }) {
+                                                    Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(2.dp))
+                                                    Text("Clear", style = MaterialTheme.typography.labelMedium)
+                                                }
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    val text = getClipboardText(context, clipboardManager)
+                                                    if (!text.isNullOrBlank()) {
+                                                        textToScanClass = text
+                                                    } else {
+                                                        android.widget.Toast.makeText(context, "Clipboard is empty", android.widget.Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste", modifier = Modifier.size(16.dp))
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Paste Clipboard", style = MaterialTheme.typography.labelMedium)
+                                            }
                                         }
                                     }
                                     OutlinedTextField(
                                         value = textToScanClass,
                                         onValueChange = { textToScanClass = it },
-                                        placeholder = { Text("Paste routine lines copied from PDF. E.g.\nCSE 322 Software Engineering 08:30-10:00 Room 604 MC MAM") },
+                                        placeholder = { Text("Paste routine lines copied from PDF, portal, or chat. E.g.\nSunday\nCSE 322 Software Engineering 08:30-10:00 Room 604 MC MAM\nMonday\nMAT 102 Linear Algebra 10:00-11:30 Room 302 AB KAS") },
                                         modifier = Modifier.fillMaxWidth().weight(1f),
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Button(
-                                    onClick = { if (textToScanClass.trim().isNotEmpty()) viewModel.parseAndScanText(textToScanClass) },
+                                    onClick = { 
+                                        if (textToScanClass.trim().isNotEmpty()) {
+                                            viewModel.parseAndScanText(textToScanClass)
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Please paste or type routine text first", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan")
+                                    Icon(
+                                        if (hasApiKey) Icons.Default.AutoAwesome else Icons.Default.QrCodeScanner,
+                                        contentDescription = "Scan"
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Scan Clipboard Text")
+                                    Text(if (hasApiKey) "Scan with Gemini AI" else "Scan Clipboard Text")
                                 }
                             }
                             3 -> {
@@ -486,7 +530,7 @@ fun ScannerScreen(
                 Tab(
                     selected = activeTabExam == 1,
                     onClick = { activeTabExam = 1; viewModel.cancelExamScan() },
-                    text = { Text("PDF File 📄", fontWeight = FontWeight.Bold) }
+                    text = { Text("PDF File", fontWeight = FontWeight.Bold) }
                 )
                 Tab(
                     selected = activeTabExam == 2,
@@ -560,7 +604,7 @@ fun ScannerScreen(
                                         Column(modifier = Modifier.weight(1f)) {
                                             Text(exam.subjectCode, style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
                                             Text(exam.subjectName, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                            Text("📅 ${exam.date} (${exam.dayOfWeek}) • 🕒 ${exam.timeStart} - ${exam.timeEnd}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
+                                            Text("${exam.date} (${exam.dayOfWeek}) • ${exam.timeStart} - ${exam.timeEnd}", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f))
                                         }
                                         Column(horizontalAlignment = Alignment.End) {
                                             Text("Room ${exam.roomNo}", style = MaterialTheme.typography.bodySmall, fontWeight = FontWeight.Bold, color = Color(0xFFFF5252))
@@ -722,38 +766,82 @@ fun ScannerScreen(
                                 }
                             }
                             2 -> {
-                                Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                                        Text("Paste PDF Exam Routine Text", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                        TextButton(
-                                            onClick = {
-                                                val text = clipboardManager.getText()?.text
-                                                if (!text.isNullOrEmpty()) textToScanExam = text
+                                val hasApiKey = viewModel.getEffectiveApiKey().isNotEmpty()
+                                Column(modifier = Modifier.weight(1f).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                            Text("Paste Exam Routine Text", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                                            if (hasApiKey) {
+                                                Surface(
+                                                    color = MaterialTheme.colorScheme.errorContainer,
+                                                    shape = RoundedCornerShape(8.dp)
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Icon(Icons.Default.AutoAwesome, contentDescription = "AI", tint = MaterialTheme.colorScheme.error, modifier = Modifier.size(12.dp))
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text("Gemini AI", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onErrorContainer, fontWeight = FontWeight.Bold, fontSize = 10.sp)
+                                                    }
+                                                }
                                             }
-                                        ) {
-                                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste")
-                                            Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Paste Clipboard")
+                                        }
+                                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                            if (textToScanExam.isNotEmpty()) {
+                                                TextButton(onClick = { textToScanExam = "" }) {
+                                                    Icon(Icons.Default.Clear, contentDescription = "Clear", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                                    Spacer(modifier = Modifier.width(2.dp))
+                                                    Text("Clear", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                                                }
+                                            }
+                                            TextButton(
+                                                onClick = {
+                                                    val text = getClipboardText(context, clipboardManager)
+                                                    if (!text.isNullOrBlank()) {
+                                                        textToScanExam = text
+                                                    } else {
+                                                        android.widget.Toast.makeText(context, "Clipboard is empty", android.widget.Toast.LENGTH_SHORT).show()
+                                                    }
+                                                }
+                                            ) {
+                                                Icon(Icons.Default.ContentPaste, contentDescription = "Paste", modifier = Modifier.size(16.dp), tint = MaterialTheme.colorScheme.error)
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text("Paste Clipboard", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.error)
+                                            }
                                         }
                                     }
                                     OutlinedTextField(
                                         value = textToScanExam,
                                         onValueChange = { textToScanExam = it },
-                                        placeholder = { Text("Paste midterm or semester final exam lines. E.g.\nDate: 2026-07-20\nCSE 322 Software Engineering 10:00-13:00 Room 604 MC\nDate: 2026-07-22\nCSE 313 Compiler Design 10:00-13:00 Room 501 MC") },
+                                        placeholder = { Text("Paste midterm or semester final exam lines. E.g.\nDate: 2026-07-20 (Monday)\nCSE 322 Software Engineering 10:00-13:00 Room 604 MC\nDate: 2026-07-22 (Wednesday)\nCSE 313 Compiler Design 10:00-13:00 Room 501 MC") },
                                         modifier = Modifier.fillMaxWidth().weight(1f),
                                         shape = RoundedCornerShape(12.dp)
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(16.dp))
+                                Spacer(modifier = Modifier.height(12.dp))
                                 Button(
-                                    onClick = { if (textToScanExam.trim().isNotEmpty()) viewModel.parseAndScanExamText(textToScanExam) },
+                                    onClick = { 
+                                        if (textToScanExam.trim().isNotEmpty()) {
+                                            viewModel.parseAndScanExamText(textToScanExam)
+                                        } else {
+                                            android.widget.Toast.makeText(context, "Please paste or type exam routine text first", android.widget.Toast.LENGTH_SHORT).show()
+                                        }
+                                    },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
                                     colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error)
                                 ) {
-                                    Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan")
+                                    Icon(
+                                        if (hasApiKey) Icons.Default.AutoAwesome else Icons.Default.QrCodeScanner,
+                                        contentDescription = "Scan"
+                                    )
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Scan Exam Text")
+                                    Text(if (hasApiKey) "Scan with Gemini AI" else "Scan Exam Text")
                                 }
                             }
                         }
@@ -860,5 +948,35 @@ fun PdfPageViewer(
                 Icon(Icons.Default.Refresh, contentDescription = "Reset Zoom", tint = Color.White)
             }
         }
+    }
+}
+
+/**
+ * Robust clipboard reader supporting Compose ClipboardManager and Android System Clipboard
+ */
+fun getClipboardText(
+    context: android.content.Context,
+    clipboardManager: androidx.compose.ui.platform.ClipboardManager
+): String? {
+    try {
+        val composeText = clipboardManager.getText()?.text
+        if (!composeText.isNullOrBlank()) {
+            return composeText
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+    
+    return try {
+        val sysClip = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+        if (sysClip != null && sysClip.hasPrimaryClip()) {
+            val item = sysClip.primaryClip?.getItemAt(0)
+            item?.coerceToText(context)?.toString()
+        } else {
+            null
+        }
+    } catch (e: Exception) {
+        e.printStackTrace()
+        null
     }
 }

@@ -14,7 +14,7 @@ android {
   compileSdk { version = release(36) { minorApiLevel = 1 } }
 
   defaultConfig {
-    applicationId = "com.aistudio.diuroutine.vkmzqp"
+    applicationId = "com.diuroutine.app"
     minSdk = 24
     targetSdk = 36
     versionCode = 1
@@ -32,7 +32,9 @@ android {
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     create("debugConfig") {
-      storeFile = file("${rootDir}/debug.keystore")
+      val localKeystore = file("${rootDir}/debug.keystore")
+      val homeKeystore = file("${System.getProperty("user.home")}/.android/debug.keystore")
+      storeFile = if (localKeystore.exists()) localKeystore else homeKeystore
       storePassword = "android"
       keyAlias = "androiddebugkey"
       keyPassword = "android"
@@ -59,8 +61,7 @@ android {
   testOptions { unitTests { isIncludeAndroidResources = true } }
 }
 
-// Configure the Secrets Gradle Plugin to use .env and .env.example files
-// to match the convention used in Web projects.
+// Configure the Secrets Gradle Plugin to use .env and .env.example files.
 secrets {
   propertiesFileName = ".env"
   defaultPropertiesFileName = ".env.example"

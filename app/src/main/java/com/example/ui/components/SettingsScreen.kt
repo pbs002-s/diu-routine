@@ -43,6 +43,13 @@ fun SettingsScreen(
     val customDepts by viewModel.customDepartments.collectAsState()
     val customSections by viewModel.customSections.collectAsState()
     val alarmOffset by viewModel.alarmOffsetMinutes.collectAsState()
+    val storedApiKey by viewModel.geminiApiKey.collectAsState()
+
+    var apiKeyInput by remember(storedApiKey) { mutableStateOf(storedApiKey) }
+    var isKeyVisible by remember { mutableStateOf(false) }
+    var isTestingConnection by remember { mutableStateOf(false) }
+    var connectionTestMessage by remember { mutableStateOf<String?>(null) }
+    var connectionTestSuccess by remember { mutableStateOf<Boolean?>(null) }
 
     var showResetClassesDialog by remember { mutableStateOf(false) }
     var showResetExamsDialog by remember { mutableStateOf(false) }
@@ -75,6 +82,212 @@ fun SettingsScreen(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Gemini AI Configuration Card
+        item {
+            val effectiveKey = viewModel.getEffectiveApiKey()
+            val isKeyConfigured = effectiveKey.isNotEmpty()
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.AutoAwesome,
+                                contentDescription = "Gemini AI",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Gemini AI Integration",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Surface(
+                            color = if (isKeyConfigured) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Text(
+                                text = if (isKeyConfigured) "Active" else "Not Configured",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isKeyConfigured) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Connect Google Gemini API to enable AI-powered PDF parsing, image scanning, and intelligent text extraction.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+
+                    OutlinedTextField(
+                        value = apiKeyInput,
+                        onValueChange = { apiKeyInput = it },
+                        label = { Text("Gemini API Key") },
+                        placeholder = { Text("AIzaSy...") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        visualTransformation = if (isKeyVisible) androidx.compose.ui.text.input.VisualTransformation.None else androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        trailingIcon = {
+                            IconButton(onClick = { isKeyVisible = !isKeyVisible }) {
+                                Icon(
+                                    imageVector = if (isKeyVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                                    contentDescription = if (isKeyVisible) "Hide Key" else "Show Key"
+                                )
+                            }
+                        },
+                        shape = RoundedCornerShape(12.dp)
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // Paste Button
+                        OutlinedButton(
+                            onClick = {
+                                try {
+                                    val clip = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                    val text = clip?.primaryClip?.getItemAt(0)?.text?.toString()
+                                    if (!text.isNullOrBlank()) {
+                                        apiKeyInput = text.trim()
+                                    } else {
+                                        android.widget.Toast.makeText(context, "Clipboard is empty", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Failed to read clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Paste", fontSize = 12.sp)
+                        }
+
+                        // Save Button
+                        Button(
+                            onClick = {
+                                viewModel.setGeminiApiKey(apiKeyInput)
+                                connectionTestMessage = null
+                                connectionTestSuccess = null
+                                android.widget.Toast.makeText(context, "API Key saved successfully", android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Icon(Icons.Default.Save, contentDescription = "Save", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Save", fontSize = 12.sp)
+                        }
+
+                        // Test Connection Button
+                        FilledTonalButton(
+                            onClick = {
+                                if (apiKeyInput.isNotBlank() && apiKeyInput != storedApiKey) {
+                                    viewModel.setGeminiApiKey(apiKeyInput)
+                                }
+                                isTestingConnection = true
+                                connectionTestMessage = null
+                                connectionTestSuccess = null
+                                viewModel.testGeminiConnection { success, message ->
+                                    isTestingConnection = false
+                                    connectionTestSuccess = success
+                                    connectionTestMessage = message
+                                }
+                            },
+                            enabled = !isTestingConnection && (apiKeyInput.isNotBlank() || isKeyConfigured),
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.weight(1.3f)
+                        ) {
+                            if (isTestingConnection) {
+                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp)
+                            } else {
+                                Icon(Icons.Default.NetworkCheck, contentDescription = "Test", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Test", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    if (connectionTestMessage != null) {
+                        Surface(
+                            color = if (connectionTestSuccess == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(10.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (connectionTestSuccess == true) Icons.Default.CheckCircle else Icons.Default.Error,
+                                    contentDescription = "Status",
+                                    tint = if (connectionTestSuccess == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = connectionTestMessage!!,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (connectionTestSuccess == true) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        TextButton(
+                            onClick = {
+                                val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://aistudio.google.com/"))
+                                context.startActivity(intent)
+                            }
+                        ) {
+                            Icon(Icons.Default.OpenInNew, contentDescription = "Get API Key", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Get free key from Google AI Studio", fontSize = 11.sp)
+                        }
+
+                        if (storedApiKey.isNotEmpty()) {
+                            TextButton(
+                                onClick = {
+                                    viewModel.setGeminiApiKey("")
+                                    apiKeyInput = ""
+                                    connectionTestMessage = null
+                                    connectionTestSuccess = null
+                                }
+                            ) {
+                                Text("Clear Key", fontSize = 11.sp, color = MaterialTheme.colorScheme.error)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // App Theme Settings Card
         item {
             Card(
@@ -88,7 +301,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Appearance 🎨",
+                        text = "Appearance",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -143,7 +356,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     Text(
-                        text = "Academic Profile 🎓",
+                        text = "Academic Profile",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -293,7 +506,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     Text(
-                        text = "Alarms & Reminders 🔔",
+                        text = "Alarms & Reminders",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -364,7 +577,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Routine Portability & Sync 🔗",
+                        text = "Routine Portability & Sync",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.primary
@@ -438,7 +651,7 @@ fun SettingsScreen(
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     Text(
-                        text = "Database Management 🗄️",
+                        text = "Database Management",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
                         color = MaterialTheme.colorScheme.error
@@ -554,7 +767,7 @@ fun SettingsScreen(
                         }
                         Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                             text = "Created by pbs002-s 🚀",
+                             text = "Created by pbs002-s",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.ExtraBold,
                             color = MaterialTheme.colorScheme.onPrimary
@@ -791,16 +1004,44 @@ fun SettingsScreen(
                 }
             },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text(
                         text = "Paste the exported routine sync code below to instantly load the classes and exams schedule.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.End
+                    ) {
+                        TextButton(
+                            onClick = {
+                                try {
+                                    val clip = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                    val text = clip?.primaryClip?.getItemAt(0)?.text?.toString()
+                                    if (!text.isNullOrBlank()) {
+                                        importRoutineTextInput = text.trim()
+                                        importRoutineErrorText = null
+                                    } else {
+                                        android.widget.Toast.makeText(context, "Clipboard is empty", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                } catch (e: Exception) {
+                                    android.widget.Toast.makeText(context, "Failed to read clipboard", android.widget.Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                        ) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = "Paste", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Paste from Clipboard", fontSize = 12.sp)
+                        }
+                    }
                     OutlinedTextField(
                         value = importRoutineTextInput,
-                        onValueChange = { importRoutineTextInput = it },
-                        label = { Text("Paste Sync Code Here") },
+                        onValueChange = { 
+                            importRoutineTextInput = it 
+                            importRoutineErrorText = null
+                        },
+                        label = { Text("Routine Data / Sync Code") },
                         modifier = Modifier.fillMaxWidth().height(150.dp),
                         placeholder = { Text("e.g. {\"classes\": ...}") }
                     )
