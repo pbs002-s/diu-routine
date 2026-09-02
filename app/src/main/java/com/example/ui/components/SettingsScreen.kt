@@ -39,12 +39,22 @@ fun SettingsScreen(
 
     val isDarkMode by viewModel.isDarkMode.collectAsState()
     val dept by viewModel.selectedDept.collectAsState()
+    val batch by viewModel.selectedBatch.collectAsState()
     val section by viewModel.selectedSection.collectAsState()
     val customDepts by viewModel.customDepartments.collectAsState()
     val customSections by viewModel.customSections.collectAsState()
     val alarmOffset by viewModel.alarmOffsetMinutes.collectAsState()
     val storedApiKey by viewModel.geminiApiKey.collectAsState()
 
+    val availableDepts by viewModel.availableDepartments.collectAsState()
+    val availableBatches by viewModel.availableBatches.collectAsState()
+    val availableSections by viewModel.availableSections.collectAsState()
+    val liveServerUrl by viewModel.liveServerUrl.collectAsState()
+    val isLiveSyncing by viewModel.isLiveSyncing.collectAsState()
+    val liveSyncStatus by viewModel.liveSyncStatus.collectAsState()
+    val liveSyncSuccess by viewModel.liveSyncSuccess.collectAsState()
+
+    var liveServerUrlInput by remember(liveServerUrl) { mutableStateOf(liveServerUrl) }
     var apiKeyInput by remember(storedApiKey) { mutableStateOf(storedApiKey) }
     var isKeyVisible by remember { mutableStateOf(false) }
     var isTestingConnection by remember { mutableStateOf(false) }
@@ -390,6 +400,11 @@ fun SettingsScreen(
                             }
                         }
                         
+                        val deptsToDisplay = remember(availableDepts, customDepts) {
+                            val list = if (availableDepts.isNotEmpty()) availableDepts.map { it.code } else suggestedDepts
+                            (list + customDepts).distinct()
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -397,8 +412,8 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            finalDepartments.forEach { department ->
-                                val selected = dept == department
+                            deptsToDisplay.forEach { department ->
+                                val selected = dept.equals(department, ignoreCase = true)
                                 val isCustom = customDepts.contains(department)
                                 
                                 InputChip(
@@ -419,6 +434,41 @@ fun SettingsScreen(
                                     colors = InputChipDefaults.inputChipColors(
                                         selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+
+                    // Batch Selector
+                    Column {
+                        Text(
+                            text = "Batch",
+                            style = MaterialTheme.typography.bodyMedium,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        val batchesToDisplay = remember(availableBatches) {
+                            if (availableBatches.isNotEmpty()) availableBatches else listOf("68", "67", "66", "65", "64", "63", "62", "61")
+                        }
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            batchesToDisplay.forEach { b ->
+                                val selected = batch.equals(b, ignoreCase = true)
+                                InputChip(
+                                    selected = selected,
+                                    onClick = { viewModel.setBatch(b) },
+                                    label = { Text("Batch $b") },
+                                    colors = InputChipDefaults.inputChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onTertiaryContainer
                                     )
                                 )
                             }
@@ -455,6 +505,11 @@ fun SettingsScreen(
                             }
                         }
                         
+                        val sectionsToDisplay = remember(availableSections, customSections) {
+                            val list = if (availableSections.isNotEmpty()) availableSections else suggestedSections
+                            (list + customSections).distinct()
+                        }
+
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -462,8 +517,8 @@ fun SettingsScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            finalSections.forEach { sec ->
-                                val selected = section == sec
+                            sectionsToDisplay.forEach { sec ->
+                                val selected = section.equals(sec, ignoreCase = true)
                                 val isCustom = customSections.contains(sec)
                                 
                                 InputChip(
@@ -485,6 +540,144 @@ fun SettingsScreen(
                                         selectedContainerColor = MaterialTheme.colorScheme.secondaryContainer,
                                         selectedLabelColor = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Live Server & Official DIU Portal Integration Card
+        item {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp)),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surface
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = "Live Server",
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Text(
+                                text = "Live Server & Official Routine",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = MaterialTheme.colorScheme.primaryContainer
+                        ) {
+                            Text(
+                                text = "${dept}_${batch}_$section",
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onPrimaryContainer
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Sync timetable directly from the DIU Live Portal server (FastAPI) or load instantly from the bundled official DIU database.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.8f)
+                    )
+
+                    OutlinedTextField(
+                        value = liveServerUrlInput,
+                        onValueChange = { 
+                            liveServerUrlInput = it
+                            viewModel.setLiveServerUrl(it)
+                        },
+                        label = { Text("Live Server Host URL") },
+                        placeholder = { Text("http://10.0.2.2:8000 or http://192.168.x.x:8000") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
+                        trailingIcon = {
+                            IconButton(onClick = { 
+                                liveServerUrlInput = "http://10.0.2.2:8000"
+                                viewModel.setLiveServerUrl("http://10.0.2.2:8000")
+                            }) {
+                                Icon(Icons.Default.Refresh, contentDescription = "Default")
+                            }
+                        }
+                    )
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        // Load Offline Bundled Data Button
+                        OutlinedButton(
+                            onClick = {
+                                viewModel.loadOfflineRoutine(dept, batch, section)
+                            },
+                            modifier = Modifier.weight(1f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            Icon(Icons.Default.DownloadDone, contentDescription = "Offline", modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Load Bundled", fontSize = 12.sp)
+                        }
+
+                        // Live Sync Button
+                        Button(
+                            onClick = {
+                                viewModel.syncWithLiveServer(dept, batch, section)
+                            },
+                            enabled = !isLiveSyncing,
+                            modifier = Modifier.weight(1.2f),
+                            shape = RoundedCornerShape(12.dp)
+                        ) {
+                            if (isLiveSyncing) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = MaterialTheme.colorScheme.onPrimary)
+                            } else {
+                                Icon(Icons.Default.Sync, contentDescription = "Sync", modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Sync Live Server", fontSize = 12.sp)
+                            }
+                        }
+                    }
+
+                    if (liveSyncStatus != null) {
+                        Surface(
+                            color = if (liveSyncSuccess == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.errorContainer,
+                            shape = RoundedCornerShape(12.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(10.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = if (liveSyncSuccess == true) Icons.Default.CheckCircle else Icons.Default.Error,
+                                    contentDescription = "Status",
+                                    tint = if (liveSyncSuccess == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = liveSyncStatus!!,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (liveSyncSuccess == true) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                                 )
                             }
                         }

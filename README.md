@@ -68,8 +68,8 @@ flowchart LR
 ## 📲 Install
 
 ```bash
-# Grab the debug APK
-APK_DOWNLOAD/app-debug.apk
+# Grab the latest v2.0 APK
+APK_DOWNLOAD/DIU_Routine_v2.0.apk
 ```
 Enable **Install from Unknown Sources** → open the APK → done.
 

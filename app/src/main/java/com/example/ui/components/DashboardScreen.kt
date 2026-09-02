@@ -38,8 +38,12 @@ fun DashboardScreen(
     val allClasses by viewModel.allClasses.collectAsState()
     val allStudyLogs by viewModel.allStudyLogs.collectAsState()
     val dept by viewModel.selectedDept.collectAsState()
+    val batch by viewModel.selectedBatch.collectAsState()
     val sec by viewModel.selectedSection.collectAsState()
     val isDarkMode by viewModel.isDarkMode.collectAsState()
+    val isLiveSyncing by viewModel.isLiveSyncing.collectAsState()
+    val liveSyncStatus by viewModel.liveSyncStatus.collectAsState()
+    val liveSyncSuccess by viewModel.liveSyncSuccess.collectAsState()
 
     var showStudyLogDialog by remember { mutableStateOf(false) }
 
@@ -91,7 +95,7 @@ fun DashboardScreen(
                         letterSpacing = 1.2.sp
                     )
                     Text(
-                        text = "$dept Department",
+                        text = "${dept}_${batch}_${sec}",
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.ExtraBold,
                         color = MaterialTheme.colorScheme.primary
@@ -99,14 +103,50 @@ fun DashboardScreen(
                 }
 
                 Row(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
+                    // Live Server Sync Pill Button
+                    Surface(
+                        onClick = { viewModel.syncWithLiveServer() },
+                        enabled = !isLiveSyncing,
+                        shape = RoundedCornerShape(20.dp),
+                        color = if (isLiveSyncing) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.5f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (isLiveSyncing) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(12.dp),
+                                    strokeWidth = 2.dp,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            } else {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(0xFF00C853))
+                                )
+                            }
+                            Text(
+                                text = if (isLiveSyncing) "Syncing" else "Live",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    }
+
                     // Dark Mode Toggle Button Styled as a beautiful circular pill
                     IconButton(
                         onClick = { viewModel.toggleDarkMode() },
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.surfaceVariant),
                         colors = IconButtonDefaults.iconButtonColors(
@@ -117,14 +157,14 @@ fun DashboardScreen(
                             imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
                             contentDescription = "Toggle Dark Mode",
                             tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
+                            modifier = Modifier.size(18.dp)
                         )
                     }
 
                     // Profile Initials Box "PS"
                     Box(
                         modifier = Modifier
-                            .size(40.dp)
+                            .size(38.dp)
                             .clip(CircleShape)
                             .background(MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center
@@ -133,7 +173,38 @@ fun DashboardScreen(
                             text = "PS",
                             color = MaterialTheme.colorScheme.onPrimary,
                             fontWeight = FontWeight.Bold,
-                            fontSize = 14.sp
+                            fontSize = 13.sp
+                        )
+                    }
+                }
+            }
+        }
+
+        // Live Server Feedback Banner
+        if (liveSyncStatus != null) {
+            item {
+                Surface(
+                    shape = RoundedCornerShape(14.dp),
+                    color = if (liveSyncSuccess == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (liveSyncSuccess == true) Icons.Default.CheckCircle else Icons.Default.Info,
+                            contentDescription = "Status",
+                            tint = if (liveSyncSuccess == true) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Text(
+                            text = liveSyncStatus!!,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Medium,
+                            color = if (liveSyncSuccess == true) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }

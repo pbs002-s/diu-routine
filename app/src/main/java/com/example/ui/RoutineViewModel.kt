@@ -31,11 +31,15 @@ import com.example.data.Content as GeminiContent
 import com.example.data.Part
 import com.example.data.InlineData
 import com.example.data.GenerationConfig
+import com.example.data.DiuDepartment
+import com.example.data.DiuLiveClientProvider
+import com.example.data.DiuRoutineDataManager
 
 class RoutineViewModel(application: Application) : AndroidViewModel(application) {
 
     companion object {
         const val GEMINI_MODEL = "gemini-3.6-flash"
+        const val DEFAULT_SERVER_URL = "http://10.0.2.2:8000"
     }
 
     private val repository: RoutineRepository
@@ -52,11 +56,37 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     private val _selectedDept = MutableStateFlow(sharedPrefs.getString("department", "CSE") ?: "CSE")
     val selectedDept: StateFlow<String> = _selectedDept.asStateFlow()
 
-    private val _selectedSection = MutableStateFlow(sharedPrefs.getString("section", "A") ?: "A")
+    private val _selectedBatch = MutableStateFlow(sharedPrefs.getString("batch", "68") ?: "68")
+    val selectedBatch: StateFlow<String> = _selectedBatch.asStateFlow()
+
+    private val _selectedSection = MutableStateFlow(sharedPrefs.getString("section", "D") ?: "D")
     val selectedSection: StateFlow<String> = _selectedSection.asStateFlow()
 
     private val _selectedDay = MutableStateFlow(getCurrentDayOfWeekString())
     val selectedDay: StateFlow<String> = _selectedDay.asStateFlow()
+
+    // Live Server Configuration
+    private val _liveServerUrl = MutableStateFlow(sharedPrefs.getString("live_server_url", DEFAULT_SERVER_URL) ?: DEFAULT_SERVER_URL)
+    val liveServerUrl: StateFlow<String> = _liveServerUrl.asStateFlow()
+
+    private val _isLiveSyncing = MutableStateFlow(false)
+    val isLiveSyncing: StateFlow<Boolean> = _isLiveSyncing.asStateFlow()
+
+    private val _liveSyncStatus = MutableStateFlow<String?>(null)
+    val liveSyncStatus: StateFlow<String?> = _liveSyncStatus.asStateFlow()
+
+    private val _liveSyncSuccess = MutableStateFlow<Boolean?>(null)
+    val liveSyncSuccess: StateFlow<Boolean?> = _liveSyncSuccess.asStateFlow()
+
+    // Official DIU Lists (loaded from bundled offline assets and refreshed live)
+    private val _availableDepartments = MutableStateFlow<List<DiuDepartment>>(emptyList())
+    val availableDepartments: StateFlow<List<DiuDepartment>> = _availableDepartments.asStateFlow()
+
+    private val _availableBatches = MutableStateFlow<List<String>>(emptyList())
+    val availableBatches: StateFlow<List<String>> = _availableBatches.asStateFlow()
+
+    private val _availableSections = MutableStateFlow<List<String>>(emptyList())
+    val availableSections: StateFlow<List<String>> = _availableSections.asStateFlow()
 
     // Standalone Custom Departments & Sections Lists
     private val _customDepartments = MutableStateFlow<List<String>>(
@@ -189,6 +219,36 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
                 RoutineAlarmScheduler.rescheduleAllExams(getApplication(), exams)
             }
         }
+
+        // Initialize DIU lists from bundled assets and auto-seed if empty
+        viewModelScope.launch(Dispatchers.IO) {
+            loadOfflineMetadata()
+            // Check if user has zero classes; if so, populate with default section routine
+            val existing = repository.allClasses.first()
+            if (existing.isEmpty()) {
+                val initialRoutine = DiuRoutineDataManager.getOfflineRoutineForSection(
+                    getApplication(),
+                    _selectedDept.value,
+                    _selectedBatch.value,
+                    _selectedSection.value
+                )
+                if (initialRoutine.isNotEmpty()) {
+                    repository.insertClasses(initialRoutine)
+                }
+            }
+        }
+    }
+
+    private fun loadOfflineMetadata() {
+        val app = getApplication<Application>()
+        val depts = DiuRoutineDataManager.getOfflineDepartments(app)
+        _availableDepartments.value = depts
+
+        val batches = DiuRoutineDataManager.getOfflineBatches(app, _selectedDept.value)
+        _availableBatches.value = batches
+
+        val sections = DiuRoutineDataManager.getOfflineSections(app, _selectedDept.value, _selectedBatch.value)
+        _availableSections.value = sections
     }
 
     // Settings & Personalization
@@ -201,11 +261,113 @@ class RoutineViewModel(application: Application) : AndroidViewModel(application)
     fun setDepartment(dept: String) {
         _selectedDept.value = dept
         sharedPrefs.edit().putString("department", dept).apply()
+        // Refresh batches and sections for this department
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val batches = DiuRoutineDataManager.getOfflineBatches(app, dept)
+            _availableBatches.value = batches
+            val defaultBatch = batches.firstOrNull() ?: _selectedBatch.value
+            _selectedBatch.value = defaultBatch
+
+            val sections = DiuRoutineDataManager.getOfflineSections(app, dept, defaultBatch)
+            _availableSections.value = sections
+        }
+    }
+
+    fun setBatch(batch: String) {
+        _selectedBatch.value = batch
+        sharedPrefs.edit().putString("batch", batch).apply()
+        // Refresh sections for this batch
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val sections = DiuRoutineDataManager.getOfflineSections(app, _selectedDept.value, batch)
+            _availableSections.value = sections
+        }
     }
 
     fun setSection(section: String) {
         _selectedSection.value = section
         sharedPrefs.edit().putString("section", section).apply()
+    }
+
+    fun setLiveServerUrl(url: String) {
+        val trimmed = url.trim()
+        _liveServerUrl.value = trimmed
+        sharedPrefs.edit().putString("live_server_url", trimmed).apply()
+    }
+
+    /**
+     * Instantly loads routine from local bundled offline assets for selected department, batch & section.
+     */
+    fun loadOfflineRoutine(dept: String = _selectedDept.value, batch: String = _selectedBatch.value, section: String = _selectedSection.value) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val app = getApplication<Application>()
+            val routine = DiuRoutineDataManager.getOfflineRoutineForSection(app, dept, batch, section)
+            if (routine.isNotEmpty()) {
+                repository.clearAllClasses()
+                repository.insertClasses(routine)
+                _liveSyncStatus.value = "Loaded ${routine.size} classes from offline database for $dept ${batch}_$section"
+                _liveSyncSuccess.value = true
+            } else {
+                _liveSyncStatus.value = "No offline routine found for $dept ${batch}_$section"
+                _liveSyncSuccess.value = false
+            }
+        }
+    }
+
+    /**
+     * Connects to the Live Server or directly to the official routine.diuhub.bd portal
+     * to fetch real-time updates.
+     */
+     fun syncWithLiveServer(
+        dept: String = _selectedDept.value,
+        batch: String = _selectedBatch.value,
+        section: String = _selectedSection.value
+    ) {
+        if (_isLiveSyncing.value) return
+        _isLiveSyncing.value = true
+        _liveSyncStatus.value = "Connecting to DIU Portal..."
+        _liveSyncSuccess.value = null
+
+        viewModelScope.launch(Dispatchers.IO) {
+            var syncedSuccessfully = false
+            
+            // 1. First attempt: Try connecting to the specified liveServerUrl
+            try {
+                val api = DiuLiveClientProvider.createClient(_liveServerUrl.value)
+                val items = api.getRoutine(dept = dept, batch = batch, section = section)
+                if (items.isNotEmpty()) {
+                    val mapped = DiuRoutineDataManager.mapRoutineItemsToClassSchedules(items, dept, section)
+                    repository.clearAllClasses()
+                    repository.insertClasses(mapped)
+                    _liveSyncStatus.value = "Synced ${mapped.size} live classes for $dept ${batch}_$section!"
+                    _liveSyncSuccess.value = true
+                    syncedSuccessfully = true
+                }
+            } catch (_: Exception) {
+                // Ignore and proceed to auto-fallback
+            }
+
+            // 2. Fallback: Load instantly from the bundled official database extracted from routine.diuhub.bd
+            if (!syncedSuccessfully) {
+                val offlineFallback = DiuRoutineDataManager.getOfflineRoutineForSection(
+                    getApplication(),
+                    dept,
+                    batch,
+                    section
+                )
+                if (offlineFallback.isNotEmpty()) {
+                    repository.clearAllClasses()
+                    repository.insertClasses(offlineFallback)
+                    _liveSyncStatus.value = "Loaded ${offlineFallback.size} official classes for $dept ${batch}_$section from routine database."
+                    _liveSyncSuccess.value = true
+                } else {
+                    _liveSyncStatus.value = "No routine entries found for $dept ${batch}_$section."
+                    _liveSyncSuccess.value = false
+                }
+            }
+            _isLiveSyncing.value = false
+        }
     }
 
     fun setSelectedDay(day: String) {

@@ -472,16 +472,17 @@ fun ScannerScreen(
                                 }
                             }
                             3 -> {
+                                val batch by viewModel.selectedBatch.collectAsState()
                                 Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center, modifier = Modifier.weight(1f)) {
-                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Presets", tint = MaterialTheme.colorScheme.secondary, modifier = Modifier.size(72.dp))
+                                    Icon(Icons.Default.AutoAwesome, contentDescription = "Presets", tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(72.dp))
                                     Spacer(modifier = Modifier.height(16.dp))
-                                    Text("Load Department Preset Routine", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                                    Text("Official DIU Routine Database", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
                                     Spacer(modifier = Modifier.height(8.dp))
-                                    Text("No routine file at hand? Load a simulated DIU preset routine with realistic classes, teacher codes, and locations.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f), textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
+                                    Text("Instantly load the authentic DIU schedule for $dept Batch $batch (Section $section) extracted from routine.diuhub.bd.", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.75f), textAlign = TextAlign.Center, modifier = Modifier.padding(horizontal = 16.dp))
                                 }
                                 Button(
                                     onClick = {
-                                        viewModel.generateDepartmentPreset()
+                                        viewModel.loadOfflineRoutine(dept, batch, section)
                                         coroutineScope.launch {
                                             delay(300)
                                             activeTabClass = 0
@@ -489,11 +490,11 @@ fun ScannerScreen(
                                     },
                                     modifier = Modifier.fillMaxWidth(),
                                     shape = RoundedCornerShape(12.dp),
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.secondary)
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
                                 ) {
-                                    Icon(Icons.Default.PlayArrow, contentDescription = "Load")
+                                    Icon(Icons.Default.DownloadDone, contentDescription = "Load")
                                     Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Load $dept Preset (Section $section)")
+                                    Text("Load Official $dept ${batch}_$section Routine")
                                 }
                             }
                         }
