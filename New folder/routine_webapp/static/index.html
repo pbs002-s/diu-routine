@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DIU Class Schedule</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <div class="shell">
+    <!-- Top Minimal Navigation -->
+    <header class="app-header">
+      <div class="header-brand">
+        <a href="#" class="brand-title">Class Routine</a>
+        <span class="dept-badge" id="headerDeptBadge">CSE</span>
+      </div>
+
+      <div class="header-search">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input type="text" id="quickSearchInput" placeholder="Search batch, teacher (e.g. 68_D, MIZ)..." autocomplete="off">
+        <kbd>/</kbd>
+      </div>
+
+      <div class="header-controls">
+        <nav class="nav-tabs">
+          <button class="tab-btn active" data-tab="student">Routine</button>
+          <button class="tab-btn" data-tab="teacher">Faculty</button>
+          <button class="tab-btn" data-tab="room">Rooms</button>
+          <button class="tab-btn" data-tab="freeroom">Free Rooms</button>
+        </nav>
+
+        <button id="btnSyncLive" class="sync-status-btn" title="Directly sync with routine.diuhub.bd">
+          <span class="status-dot"></span>
+          <span id="syncStatusText">Live Server</span>
+        </button>
+
+        <a href="https://github.com/pbs002-s" target="_blank" rel="noopener noreferrer" class="icon-btn" title="Pritom Biswas (@pbs002-s) on GitHub" aria-label="GitHub Profile">
+          <svg class="theme-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+        </a>
+
+        <button id="themeToggleBtn" class="icon-btn" title="Toggle theme (Light / Dark)" aria-label="Toggle theme">
+          <!-- Sun Icon -->
+          <svg id="themeIconSun" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+          <!-- Moon Icon -->
+          <svg id="themeIconMoon" class="theme-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Container -->
+    <main class="app-main">
+      <!-- Minimal Sticky Selector Bar -->
+      <section class="filter-strip" id="filterStrip">
+        <div class="filter-group">
+          <label for="deptSelect">Department</label>
+          <select id="deptSelect"></select>
+        </div>
+        <div class="filter-group">
+          <label for="batchSelect">Batch</label>
+          <select id="batchSelect"></select>
+        </div>
+        <div class="filter-group">
+          <label for="sectionSelect">Section</label>
+          <select id="sectionSelect"></select>
+        </div>
+
+        <div class="strip-divider"></div>
+
+        <div class="meta-stats" id="metaStats">
+          <span class="meta-item"><strong id="dispSectionTag">CSE_68_D</strong></span>
+          <span class="meta-item"><span id="dispCoursesCount">0</span> courses</span>
+          <span class="meta-item"><span id="dispClassesCount">0</span> classes/wk</span>
+        </div>
+
+        <div class="strip-actions">
+          <div class="view-switch">
+            <button class="switch-btn active" id="btnDayView">Day</button>
+            <button class="switch-btn" id="btnWeekView">Week</button>
+          </div>
+          <button id="btnPrint" class="action-btn" title="Print Routine">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon"><path d="M6 9V2h12v7"></path><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+          </button>
+        </div>
+      </section>
+
+      <!-- Instructors Bar (Subtle & clean) -->
+      <div class="instructors-bar" id="instructorsBar">
+        <span class="bar-label">Instructors:</span>
+        <div class="instructors-list" id="instructorsList"></div>
+      </div>
+
+      <!-- Clean Day Selector -->
+      <div class="days-nav" id="daysNav">
+        <!-- Saturday .. Thursday injected here -->
+      </div>
+
+      <!-- Daily Schedule Timeline -->
+      <div class="timeline" id="timelineContainer">
+        <!-- Rendered via JS -->
+      </div>
+
+      <!-- Weekly Matrix View -->
+      <div class="matrix-wrapper" id="weekMatrixContainer" style="display: none;">
+        <table class="schedule-table">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>08:30 - 10:00</th>
+              <th>10:00 - 11:30</th>
+              <th>11:30 - 01:00</th>
+              <th>01:00 - 02:30</th>
+              <th>02:30 - 04:00</th>
+              <th>04:00 - 05:30</th>
+            </tr>
+          </thead>
+          <tbody id="weekTableBody"></tbody>
+        </table>
+      </div>
+
+      <!-- Other Views Container (Faculty, Rooms, Free Rooms) -->
+      <div class="aux-view-container" id="auxViewContainer" style="display: none;"></div>
+
+      <!-- Minimal Footer Credit -->
+      <footer class="app-footer">
+        <span>Crafted by <a href="https://github.com/pbs002-s" target="_blank" rel="noopener noreferrer">Pritom Biswas (@pbs002-s)</a></span>
+      </footer>
+    </main>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
