@@ -72,7 +72,18 @@ jobs:
       with:
         name: node-app
 
+    - name: Check Azure deployment configuration
+      id: azure-config
+      run: |
+        if [ "${{ env.AZURE_WEBAPP_NAME }}" = "your-app-name" ] || [ -z "${{ secrets.AZURE_WEBAPP_PUBLISH_PROFILE }}" ]; then
+          echo "configured=false" >> "$GITHUB_OUTPUT"
+          echo "Azure deployment is not configured; skipping deploy step."
+        else
+          echo "configured=true" >> "$GITHUB_OUTPUT"
+        fi
+
     - name: 'Deploy to Azure WebApp'
+      if: steps.azure-config.outputs.configured == 'true'
       id: deploy-to-webapp
       uses: azure/webapps-deploy@v2
       with:
